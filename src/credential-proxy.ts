@@ -44,8 +44,19 @@ export function startCredentialProxy(
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
 
+  // Cache the latest rate-limit headers from upstream responses.
+  // Containers can read these via GET /usage without needing real credentials.
+  let cachedRateLimitHeaders: Record<string, string> = {};
+
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
+      // /usage — return cached rate-limit data from the last upstream response
+      if (req.url === '/usage' && req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(cachedRateLimitHeaders, null, 2));
+        return;
+      }
+
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
@@ -88,6 +99,12 @@ export function startCredentialProxy(
             headers,
           } as RequestOptions,
           (upRes) => {
+            // Cache any rate-limit headers for /usage queries
+            for (const [k, v] of Object.entries(upRes.headers)) {
+              if (k.startsWith('anthropic-ratelimit') && v) {
+                cachedRateLimitHeaders[k] = String(v);
+              }
+            }
             res.writeHead(upRes.statusCode!, upRes.headers);
             upRes.pipe(res);
           },
