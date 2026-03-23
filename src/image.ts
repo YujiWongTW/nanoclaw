@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
-import type { WAMessage } from '@whiskeysockets/baileys';
 
 const MAX_DIMENSION = 1024;
 const IMAGE_REF_PATTERN = /\[Image: (attachments\/[^\]]+)\]/g;
@@ -16,10 +15,6 @@ export interface ImageAttachment {
   mediaType: string;
 }
 
-export function isImageMessage(msg: WAMessage): boolean {
-  return !!msg.message?.imageMessage;
-}
-
 export async function processImage(
   buffer: Buffer,
   groupDir: string,
@@ -28,7 +23,10 @@ export async function processImage(
   if (!buffer || buffer.length === 0) return null;
 
   const resized = await sharp(buffer)
-    .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+    .resize(MAX_DIMENSION, MAX_DIMENSION, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
     .jpeg({ quality: 85 })
     .toBuffer();
 

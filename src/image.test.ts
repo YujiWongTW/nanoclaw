@@ -13,7 +13,7 @@ vi.mock('sharp', () => {
 
 vi.mock('fs');
 
-import { processImage, parseImageReferences, isImageMessage } from './image.js';
+import { processImage, parseImageReferences } from './image.js';
 
 describe('image processing', () => {
   beforeEach(() => {
@@ -22,31 +22,22 @@ describe('image processing', () => {
     vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
   });
 
-  describe('isImageMessage', () => {
-    it('returns true for image messages', () => {
-      const msg = { message: { imageMessage: { mimetype: 'image/jpeg' } } };
-      expect(isImageMessage(msg as any)).toBe(true);
-    });
-
-    it('returns false for non-image messages', () => {
-      const msg = { message: { conversation: 'hello' } };
-      expect(isImageMessage(msg as any)).toBe(false);
-    });
-
-    it('returns false for null message', () => {
-      const msg = { message: null };
-      expect(isImageMessage(msg as any)).toBe(false);
-    });
-  });
-
   describe('processImage', () => {
     it('resizes and saves image, returns content string', async () => {
       const buffer = Buffer.from('raw-image-data');
-      const result = await processImage(buffer, '/tmp/groups/test', 'Check this out');
+      const result = await processImage(
+        buffer,
+        '/tmp/groups/test',
+        'Check this out',
+      );
 
       expect(result).not.toBeNull();
-      expect(result!.content).toMatch(/^\[Image: attachments\/img-\d+-[a-z0-9]+\.jpg\] Check this out$/);
-      expect(result!.relativePath).toMatch(/^attachments\/img-\d+-[a-z0-9]+\.jpg$/);
+      expect(result!.content).toMatch(
+        /^\[Image: attachments\/img-\d+-[a-z0-9]+\.jpg\] Check this out$/,
+      );
+      expect(result!.relativePath).toMatch(
+        /^attachments\/img-\d+-[a-z0-9]+\.jpg$/,
+      );
       expect(fs.mkdirSync).toHaveBeenCalled();
       expect(fs.writeFileSync).toHaveBeenCalled();
     });
@@ -56,11 +47,17 @@ describe('image processing', () => {
       const result = await processImage(buffer, '/tmp/groups/test', '');
 
       expect(result).not.toBeNull();
-      expect(result!.content).toMatch(/^\[Image: attachments\/img-\d+-[a-z0-9]+\.jpg\]$/);
+      expect(result!.content).toMatch(
+        /^\[Image: attachments\/img-\d+-[a-z0-9]+\.jpg\]$/,
+      );
     });
 
     it('returns null on empty buffer', async () => {
-      const result = await processImage(Buffer.alloc(0), '/tmp/groups/test', '');
+      const result = await processImage(
+        Buffer.alloc(0),
+        '/tmp/groups/test',
+        '',
+      );
 
       expect(result).toBeNull();
     });

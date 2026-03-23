@@ -44,7 +44,8 @@ export const PROXY_BIND_HOST =
 function detectProxyBindHost(): string {
   if (os.platform() === 'darwin') {
     // Apple Container: proxy must bind to the bridge IP so containers can reach it
-    if (CONTAINER_RUNTIME_BIN === 'container') return detectAppleContainerHostIP();
+    if (CONTAINER_RUNTIME_BIN === 'container')
+      return detectAppleContainerHostIP();
     return '127.0.0.1';
   }
 
