@@ -56,9 +56,12 @@ export class TelegramChannel implements Channel {
   }
 
   async connect(): Promise<void> {
+    // Force IPv4 — Node.js v17+ may prefer IPv6 for DNS, but some networks
+    // have broken IPv6 connectivity, causing ETIMEDOUT on Telegram API calls.
+    const ipv4Agent = new https.Agent({ family: 4 });
     this.bot = new Bot(this.botToken, {
       client: {
-        baseFetchConfig: { agent: https.globalAgent, compress: true },
+        baseFetchConfig: { agent: ipv4Agent, compress: true },
       },
     });
 
@@ -270,10 +273,26 @@ export class TelegramChannel implements Channel {
       logger.error({ err: err.message }, 'Telegram bot error');
     });
 
-    // Start polling — returns a Promise that resolves when started
+    // Start polling — returns a Promise that resolves when started.
+    // If onStart doesn't fire within 30s (e.g. network flap causing grammY internal
+    // retry with long backoff), resolve anyway so NanoClaw doesn't hang on startup.
     return new Promise<void>((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          logger.warn(
+            'Telegram bot did not confirm start within 30s — continuing anyway (will connect in background)',
+          );
+          resolve();
+        }
+      }, 30000);
       this.bot!.start({
         onStart: (botInfo) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+          }
           logger.info(
             { username: botInfo.username, id: botInfo.id },
             'Telegram bot connected',
