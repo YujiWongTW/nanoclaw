@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoClaw 架構解析</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #ffa657;
+    --accent5: #ff7b72;
+    --accent6: #79c0ff;
+    --code-bg: #0d1117;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+    scroll-behavior: smooth;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: rgba(13,17,23,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 52px;
+  }
+
+  .nav-logo {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 1.1rem;
+    margin-right: 2rem;
+    white-space: nowrap;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-links::-webkit-scrollbar { display: none; }
+
+  .nav-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 0 1rem;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .nav-link:hover { color: var(--text); }
+  .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* SECTIONS */
+  section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 6rem 2rem 4rem;
+  }
+
+  section:first-of-type { padding-top: 8rem; }
+
+  .section-label {
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+
+  h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--accent6);
+  }
+
+  p { color: var(--muted); margin-bottom: 1rem; }
+  p strong { color: var(--text); }
+
+  /* HERO ARCH DIAGRAM */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin: 2.5rem 0;
+    overflow-x: auto;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .arch-row:last-child { margin-bottom: 0; }
+
+  .arch-node {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1.1rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    min-width: 110px;
+    position: relative;
+  }
+
+  .arch-node:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(88,166,255,0.15);
+  }
+
+  .arch-node.channel { border-color: #3fb95066; color: var(--accent2); }
+  .arch-node.channel:hover { border-color: var(--accent2); box-shadow: 0 4px 16px rgba(63,185,80,0.15); }
+  .arch-node.core { border-color: #58a6ff66; color: var(--accent); }
+  .arch-node.container-n { border-color: #d2a8ff66; color: var(--accent3); }
+  .arch-node.container-n:hover { border-color: var(--accent3); box-shadow: 0 4px 16px rgba(210,168,255,0.15); }
+  .arch-node.storage { border-color: #ffa65766; color: var(--accent4); }
+  .arch-node.storage:hover { border-color: var(--accent4); box-shadow: 0 4px 16px rgba(255,166,87,0.15); }
+  .arch-node.api { border-color: #ff7b7266; color: var(--accent5); }
+  .arch-node.api:hover { border-color: var(--accent5); box-shadow: 0 4px 16px rgba(255,123,114,0.15); }
+
+  .arch-arrow {
+    color: var(--muted);
+    font-size: 1.2rem;
+    padding: 0 0.4rem;
+    flex-shrink: 0;
+  }
+
+  .arch-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+    display: block;
+  }
+
+  .arch-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .arch-section-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 0.5rem;
+    font-family: 'Courier New', monospace;
+  }
+
+  /* STARTUP SEQUENCE */
+  .steps {
+    margin: 2rem 0;
+  }
+
+  .step {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .step:hover { background: var(--surface); border-color: var(--border); }
+  .step.active { background: var(--surface); border-color: var(--accent); }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-family: 'Courier New', monospace;
+    color: var(--muted);
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .step.active .step-num {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+  }
+
+  .step-content { flex: 1; }
+
+  .step-title {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+  }
+
+  .step.active .step-title { color: var(--accent); }
+
+  .step-desc {
+    font-size: 0.83rem;
+    color: var(--muted);
+    display: none;
+    margin-top: 0.5rem;
+  }
+
+  .step.active .step-desc { display: block; }
+
+  .step-code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    margin-top: 0.75rem;
+    color: var(--text);
+    display: none;
+    line-height: 1.7;
+  }
+
+  .step.active .step-code { display: block; }
+
+  .kw { color: #ff7b72; }
+  .fn { color: #d2a8ff; }
+  .str { color: #a5d6ff; }
+  .cm { color: #8b949e; }
+  .num { color: #79c0ff; }
+  .type { color: #ffa657; }
+
+  /* MESSAGE FLOW */
+  .flow-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .flow-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .flow-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.83rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .flow-tab:hover { color: var(--text); border-color: var(--muted); }
+  .flow-tab.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+
+  .flow-stage {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+    min-height: 200px;
+  }
+
+  .flow-node {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .flow-box {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    text-align: center;
+    min-width: 90px;
+    max-width: 110px;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .flow-box.lit {
+    border-color: var(--accent);
+    background: rgba(88,166,255,0.08);
+    color: var(--accent);
+    box-shadow: 0 0 12px rgba(88,166,255,0.2);
+  }
+
+  .flow-box.lit-green {
+    border-color: var(--accent2);
+    background: rgba(63,185,80,0.08);
+    color: var(--accent2);
+    box-shadow: 0 0 12px rgba(63,185,80,0.2);
+  }
+
+  .flow-box.lit-purple {
+    border-color: var(--accent3);
+    background: rgba(210,168,255,0.08);
+    color: var(--accent3);
+    box-shadow: 0 0 12px rgba(210,168,255,0.2);
+  }
+
+  .flow-box.lit-orange {
+    border-color: var(--accent4);
+    background: rgba(255,166,87,0.08);
+    color: var(--accent4);
+    box-shadow: 0 0 12px rgba(255,166,87,0.2);
+  }
+
+  .flow-box.lit-red {
+    border-color: var(--accent5);
+    background: rgba(255,123,114,0.08);
+    color: var(--accent5);
+    box-shadow: 0 0 12px rgba(255,123,114,0.2);
+  }
+
+  .flow-box.skipped {
+    opacity: 0.3;
+  }
+
+  .flow-connector {
+    display: flex;
+    align-items: center;
+    padding: 0 0.3rem;
+    padding-top: 0.6rem; /* align with box top */
+    color: var(--muted);
+    flex-direction: column;
+    justify-content: flex-start;
+    min-width: 32px;
+  }
+
+  .flow-arrow {
+    font-size: 1rem;
+    transition: color 0.3s;
+    margin-top: 0.55rem;
+  }
+
+  .flow-arrow.active-arrow { color: var(--accent); }
+  .flow-arrow.active-arrow-green { color: var(--accent2); }
+  .flow-arrow.active-arrow-purple { color: var(--accent3); }
+
+  .flow-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 0.3rem;
+    max-width: 90px;
+  }
+
+  .flow-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.83rem;
+    transition: all 0.2s;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .btn.primary:hover { background: #79b8ff; border-color: #79b8ff; }
+
+  .flow-step-info {
+    font-size: 0.82rem;
+    color: var(--muted);
+    flex: 1;
+    font-family: 'Courier New', monospace;
+  }
+
+  .flow-step-info strong { color: var(--text); }
+
+  /* CONTAINER ISOLATION */
+  .mount-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83rem;
+    margin: 1.5rem 0;
+  }
+
+  .mount-table th {
+    text-align: left;
+    padding: 0.6rem 1rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .mount-table td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Courier New', monospace;
+    vertical-align: top;
+  }
+
+  .mount-table tr:hover td { background: var(--surface); }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+  }
+
+  .badge-ro { background: rgba(255,123,114,0.15); color: var(--accent5); border: 1px solid rgba(255,123,114,0.3); }
+  .badge-rw { background: rgba(63,185,80,0.15); color: var(--accent2); border: 1px solid rgba(63,185,80,0.3); }
+  .badge-main { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+  .badge-all { background: rgba(210,168,255,0.15); color: var(--accent3); border: 1px solid rgba(210,168,255,0.3); }
+
+  /* CREDENTIAL PROXY */
+  .proxy-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .proxy-node {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    font-size: 0.8rem;
+    text-align: center;
+    flex-shrink: 0;
+    min-width: 100px;
+  }
+
+  .proxy-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 0.3rem;
+    flex-shrink: 0;
+  }
+
+  .proxy-arrow-line {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    margin: 0.2rem 0;
+  }
+
+  .proxy-arrow-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .proxy-arrow-icon { color: var(--muted); font-size: 0.9rem; }
+
+  /* MEMORY LAYERS */
+  .memory-stack {
+    margin: 2rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .memory-layer {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .memory-layer::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+
+  .memory-layer.layer-global::before { background: var(--accent4); }
+  .memory-layer.layer-group::before { background: var(--accent2); }
+  .memory-layer.layer-session::before { background: var(--accent); }
+  .memory-layer.layer-conv::before { background: var(--accent3); }
+
+  .memory-layer:hover { border-color: var(--muted); }
+  .memory-layer.open { border-color: var(--accent); }
+
+  .memory-layer-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .memory-layer-title {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .memory-layer-meta {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .memory-layer-body {
+    display: none;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.83rem;
+    color: var(--muted);
+  }
+
+  .memory-layer.open .memory-layer-body { display: block; }
+
+  .memory-layer-body code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    display: block;
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    margin: 0.5rem 0;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  .chevron {
+    color: var(--muted);
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+  }
+
+  .memory-layer.open .chevron { transform: rotate(90deg); }
+
+  /* IPC */
+  .ipc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .ipc-card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.2s;
+    cursor: default;
+  }
+
+  .ipc-card:hover {
+    border-color: var(--accent3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(210,168,255,0.12);
+  }
+
+  .ipc-card-title {
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    color: var(--accent3);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .ipc-card-desc {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .perm-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+  }
+
+  /* PERM MATRIX */
+  .perm-matrix {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+  }
+
+  .perm-matrix table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  .perm-matrix th {
+    padding: 0.7rem 1rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .perm-matrix td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Courier New', monospace;
+  }
+
+  .perm-matrix tr:last-child td { border-bottom: none; }
+  .perm-matrix tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .yes { color: var(--accent2); }
+  .no { color: var(--muted); }
+  .main-only { color: var(--accent); font-size: 0.75rem; }
+
+  /* TOOLTIP */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.75rem;
+    color: var(--text);
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+    font-family: 'Courier New', monospace;
+  }
+
+  /* CODE BLOCK */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.75;
+    overflow-x: auto;
+    margin: 1rem 0;
+    color: var(--text);
+  }
+
+  .code-filename {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* GRID LAYOUT */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  @media (max-width: 700px) {
+    .two-col { grid-template-columns: 1fr; }
+    nav { padding: 0 1rem; }
+    section { padding: 5rem 1rem 3rem; }
+    h1 { font-size: 1.8rem; }
+    .proxy-flow { flex-direction: column; }
+    .flow-stage { min-height: auto; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+
+  hr.section-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4rem 0 0;
+  }
+
+  /* SCROLL INDICATOR */
+  .scroll-prog {
+    position: fixed;
+    top: 52px; left: 0; right: 0;
+    height: 2px;
+    background: var(--border);
+    z-index: 99;
+  }
+
+  .scroll-prog-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s;
+  }
+
+  /* ANIMATIONS */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .pulsing { animation: pulse 1s ease-in-out infinite; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-in { animation: slideIn 0.3s ease forwards; }
+
+  /* FLOW DESCRIPTION BOX */
+  .flow-desc-box {
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 1rem;
+    min-height: 48px;
+    transition: all 0.2s;
+  }
+
+  .flow-desc-box strong { color: var(--text); }
+
+  /* HIGHLIGHT ROW */
+  .highlight-row td { background: rgba(88,166,255,0.04) !important; }
+</style>
+</head>
+<body>
+
+<div class="scroll-prog"><div class="scroll-prog-bar" id="progBar"></div></div>
+
+<nav>
+  <div class="nav-logo">nanoclaw</div>
+  <div class="nav-links">
+    <a class="nav-link" href="#overview">總覽</a>
+    <a class="nav-link" href="#startup">啟動序列</a>
+    <a class="nav-link" href="#msgflow">訊息流程</a>
+    <a class="nav-link" href="#isolation">Container 隔離</a>
+    <a class="nav-link" href="#memory">記憶與規則</a>
+    <a class="nav-link" href="#ipc">IPC 系統</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 1: OVERVIEW -->
+<section id="overview">
+  <div class="section-label">§1 系統總覽</div>
+  <h1>NanoClaw 架構解析</h1>
+  <p>單一 Node.js 進程，透過 skill-based channel 系統接收訊息，將請求路由至 Claude Agent SDK 執行的 container，並透過 IPC 回傳結果。點擊任一節點查看說明。</p>
+
+  <div class="arch-diagram">
+    <div class="arch-section-label">Channels（訊息來源）</div>
+    <div class="arch-row">
+      <div class="arch-group">
+        <div class="arch-node channel" onclick="showTip('channel')" data-tip="自我註冊，credential 缺失時自動跳過">WhatsApp</div>
+        <div class="arch-node channel" onclick="showTip('channel')" data-tip="自我註冊，credential 缺失時自動跳過">Telegram</div>
+        <div class="arch-node channel" onclick="showTip('channel')" data-tip="自我註冊，credential 缺失時自動跳過">Slack</div>
+        <div class="arch-node channel" onclick="showTip('channel')" data-tip="自我註冊，credential 缺失時自動跳過">Discord</div>
+        <div class="arch-node channel" onclick="showTip('channel')" data-tip="自我註冊，credential 缺失時自動跳過">Gmail</div>
+      </div>
+    </div>
+    <div class="arch-row">
+      <div style="width:100%;display:flex;justify-content:center;color:var(--muted);">↓ onMessage() → SQLite</div>
+    </div>
+
+    <div class="arch-section-label" style="margin-top:1rem">Orchestrator（src/index.ts）</div>
+    <div class="arch-row">
+      <div class="arch-node core" onclick="showTip('poll')" data-tip="每 POLL_INTERVAL 輪詢，依 group 分派">startMessageLoop()</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node core" onclick="showTip('queue')" data-tip="保證同一 group 的 container 序列執行">GroupQueue</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node core" onclick="showTip('runner')" data-tip="spawn container，stdin 送 prompt，stdout 讀結果">container-runner</div>
+    </div>
+
+    <div class="arch-row" style="margin-top:0.5rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;justify-content:center;">
+        <div style="font-size:0.75rem;color:var(--muted)">task-scheduler</div>
+        <div style="color:var(--muted)">·</div>
+        <div style="font-size:0.75rem;color:var(--muted)">ipc-watcher</div>
+        <div style="color:var(--muted)">·</div>
+        <div style="font-size:0.75rem;color:var(--muted)">credential-proxy</div>
+        <div style="color:var(--muted)">·</div>
+        <div style="font-size:0.75rem;color:var(--muted)">remote-control</div>
+      </div>
+    </div>
+
+    <div class="arch-row" style="margin-top:0.5rem">
+      <div style="width:100%;display:flex;justify-content:center;color:var(--muted);">↓ spawn container &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↑ IPC 檔案</div>
+    </div>
+
+    <div class="arch-section-label" style="margin-top:0.5rem">Containers（isolated Linux VMs）</div>
+    <div class="arch-row">
+      <div class="arch-group">
+        <div class="arch-node container-n" onclick="showTip('container')" data-tip="main group：可見 project root + 所有 group">main group</div>
+        <div class="arch-node container-n" onclick="showTip('container')" data-tip="只能看到自己的 group folder">group A</div>
+        <div class="arch-node container-n" onclick="showTip('container')" data-tip="只能看到自己的 group folder">group B</div>
+        <div class="arch-node container-n" style="border-style:dashed" data-tip="每個 group 獨立隔離">...</div>
+      </div>
+    </div>
+
+    <div class="arch-row" style="margin-top:0.5rem">
+      <div style="width:100%;display:flex;justify-content:center;color:var(--muted);">↓ ANTHROPIC_BASE_URL → credential proxy → 注入真實 key</div>
+    </div>
+
+    <div class="arch-section-label" style="margin-top:0.5rem">外部服務</div>
+    <div class="arch-row">
+      <div class="arch-group">
+        <div class="arch-node api" data-tip="container 不知道真實 API key">api.anthropic.com</div>
+        <div class="arch-node storage" data-tip="所有訊息、session、task 持久化">SQLite</div>
+        <div class="arch-node storage" data-tip="groups/{name}/CLAUDE.md、conversations/">群組資料夾</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tip-box" style="display:none" class="code-block slide-in">
+    <span id="tip-text"></span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 2: STARTUP -->
+<section id="startup">
+  <hr class="section-divider">
+  <div class="section-label" style="margin-top:4rem">§2 啟動序列</div>
+  <h2>main() 啟動流程</h2>
+  <p>點擊各步驟查看對應的程式碼與說明。</p>
+
+  <div class="steps" id="steps">
+    <div class="step active" onclick="activateStep(this)">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">ensureContainerSystemRunning()</div>
+        <div class="step-desc">確認 Docker / Apple Container runtime 正在執行，並清理上次可能殘留的 orphan containers。</div>
+        <div class="step-code"><span class="fn">ensureContainerRuntimeRunning</span>();
+<span class="fn">cleanupOrphans</span>();  <span class="cm">// kill nanoclaw-* containers from last run</span></div>
+      </div>
+    </div>
+
+    <div class="step" onclick="activateStep(this)">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">initDatabase() + loadState()</div>
+        <div class="step-desc">初始化 SQLite，讀取上次的 <code>last_timestamp</code>（message cursor）、<code>last_agent_timestamp</code>（per-group agent cursor）、所有 sessions 和 registered groups。</div>
+        <div class="step-code"><span class="fn">initDatabase</span>();
+<span class="cm">// 從 DB 恢復狀態</span>
+lastTimestamp = <span class="fn">getRouterState</span>(<span class="str">'last_timestamp'</span>) || <span class="str">''</span>;
+lastAgentTimestamp = <span class="type">JSON</span>.<span class="fn">parse</span>(<span class="fn">getRouterState</span>(<span class="str">'last_agent_timestamp'</span>));
+sessions = <span class="fn">getAllSessions</span>();
+registeredGroups = <span class="fn">getAllRegisteredGroups</span>();</div>
+      </div>
+    </div>
+
+    <div class="step" onclick="activateStep(this)">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">startCredentialProxy()</div>
+        <div class="step-desc">啟動本地 HTTP server，監聽 container 發出的 API 請求，在轉發前注入真實的 API key 或 OAuth token。Container 只知道 <code>ANTHROPIC_BASE_URL=http://host:PORT</code>，永遠不知道真正的 key。</div>
+        <div class="step-code"><span class="kw">const</span> proxyServer = <span class="kw">await</span> <span class="fn">startCredentialProxy</span>(
+  CREDENTIAL_PROXY_PORT,
+  PROXY_BIND_HOST  <span class="cm">// container bridge IP</span>
+);</div>
+      </div>
+    </div>
+
+    <div class="step" onclick="activateStep(this)">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">連線所有 Channels</div>
+        <div class="step-desc">Channel 在 <code>import './channels/index.js'</code> 時自我註冊。此步驟遍歷 registry，呼叫各 channel 的 factory，credential 缺失時自動跳過。至少一個 channel 連線成功才繼續，否則 fatal exit。</div>
+        <div class="step-code"><span class="kw">for</span> (<span class="kw">const</span> channelName <span class="kw">of</span> <span class="fn">getRegisteredChannelNames</span>()) {
+  <span class="kw">const</span> channel = <span class="fn">factory</span>(channelOpts);
+  <span class="kw">if</span> (!channel) <span class="kw">continue</span>;  <span class="cm">// credentials missing</span>
+  channels.<span class="fn">push</span>(channel);
+  <span class="kw">await</span> channel.<span class="fn">connect</span>();
+}</div>
+      </div>
+    </div>
+
+    <div class="step" onclick="activateStep(this)">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">startSchedulerLoop() + startIpcWatcher()</div>
+        <div class="step-desc">Scheduler 每分鐘掃描 DB，觸發到期的定時任務。IPC watcher 每 500ms 掃描 <code>data/ipc/{group}/</code>，處理 container 回傳的訊息、task 操作、group 註冊等指令。</div>
+        <div class="step-code"><span class="fn">startSchedulerLoop</span>({ registeredGroups, queue, ... });
+<span class="fn">startIpcWatcher</span>({
+  sendMessage, registerGroup, syncGroups,
+  onTasksChanged, ...
+});</div>
+      </div>
+    </div>
+
+    <div class="step" onclick="activateStep(this)">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <div class="step-title">recoverPendingMessages() → startMessageLoop()</div>
+        <div class="step-desc">崩潰恢復：掃描所有 registered groups，若 <code>lastAgentTimestamp</code> 之後有未處理訊息，立即入 queue 重處理。接著啟動永不中止的 poll 主循環。</div>
+        <div class="step-code"><span class="fn">recoverPendingMessages</span>();  <span class="cm">// crash recovery</span>
+<span class="fn">startMessageLoop</span>().<span class="fn">catch</span>((err) => {
+  logger.<span class="fn">fatal</span>({ err }, <span class="str">'Message loop crashed'</span>);
+  process.<span class="fn">exit</span>(<span class="num">1</span>);
+});</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 3: MSG FLOW -->
+<section id="msgflow">
+  <hr class="section-divider">
+  <div class="section-label" style="margin-top:4rem">§3 訊息流程</div>
+  <h2>從用戶訊息到 Agent 回覆</h2>
+  <p>選擇 group 類型，逐步播放完整的訊息處理流程。</p>
+
+  <div class="flow-container">
+    <div class="flow-tabs">
+      <button class="flow-tab active" onclick="setFlowMode('main', this)">Main Group（無需 trigger）</button>
+      <button class="flow-tab" onclick="setFlowMode('nonmain', this)">Non-main Group（需 @trigger）</button>
+      <button class="flow-tab" onclick="setFlowMode('pipe', this)">Piping（容器仍存活）</button>
+    </div>
+
+    <div class="flow-stage" id="flowStage">
+      <!-- nodes injected by JS -->
+    </div>
+
+    <div class="flow-desc-box" id="flowDesc">按下「下一步」開始播放流程。</div>
+
+    <div class="flow-controls">
+      <button class="btn primary" onclick="flowNext()">▶ 下一步</button>
+      <button class="btn" onclick="flowReset()">↺ 重置</button>
+      <div class="flow-step-info" id="flowStepInfo">步驟 0 / <span id="flowTotal">0</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 4: ISOLATION -->
+<section id="isolation">
+  <hr class="section-divider">
+  <div class="section-label" style="margin-top:4rem">§4 Container 隔離</div>
+  <h2>Volume Mounts 與安全模型</h2>
+  <p>每個 group 的 container 只能看到被明確掛入的目錄。Main group 有更高權限，但 project root 仍是 read-only。</p>
+
+  <div class="flow-tabs" style="margin-bottom:1.5rem">
+    <button class="flow-tab active" id="mountTabMain" onclick="showMountTab('main')">Main Group</button>
+    <button class="flow-tab" id="mountTabOther" onclick="showMountTab('other')">Non-main Group</button>
+  </div>
+
+  <table class="mount-table" id="mountTableMain">
+    <thead>
+      <tr>
+        <th>Host 路徑</th>
+        <th>Container 路徑</th>
+        <th>權限</th>
+        <th>用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="cm">$CWD</span></td>
+        <td>/workspace/project</td>
+        <td><span class="badge badge-ro">read-only</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">讀取 src/、CLAUDE.md 等，但無法修改 host 程式碼</td>
+      </tr>
+      <tr>
+        <td><span class="cm">groups/{folder}</span></td>
+        <td>/workspace/group</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">群組工作目錄、CLAUDE.md、conversations/</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/sessions/{folder}/.claude</span></td>
+        <td>/home/node/.claude</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">Claude Code session、settings、skills（per-group 隔離）</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/ipc/{folder}</span></td>
+        <td>/workspace/ipc</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">IPC 通道（messages/、tasks/、input/）</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/sessions/{folder}/agent-runner-src</span></td>
+        <td>/app/src</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">Per-group agent-runner 原始碼（可客製化，啟動時重新編譯）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="mount-table" id="mountTableOther" style="display:none">
+    <thead>
+      <tr>
+        <th>Host 路徑</th>
+        <th>Container 路徑</th>
+        <th>權限</th>
+        <th>用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="cm">groups/{folder}</span></td>
+        <td>/workspace/group</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">群組工作目錄，只能看到自己的 group</td>
+      </tr>
+      <tr>
+        <td><span class="cm">groups/global</span></td>
+        <td>/workspace/global</td>
+        <td><span class="badge badge-ro">read-only</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">全局記憶，CLAUDE.md 會被 append 到 system prompt</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/sessions/{folder}/.claude</span></td>
+        <td>/home/node/.claude</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">Claude Code session、settings、skills</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/ipc/{folder}</span></td>
+        <td>/workspace/ipc</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">IPC 通道（只能操作自己 group 的 namespace）</td>
+      </tr>
+      <tr>
+        <td><span class="cm">data/sessions/{folder}/agent-runner-src</span></td>
+        <td>/app/src</td>
+        <td><span class="badge badge-rw">read-write</span></td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">Per-group agent-runner 原始碼</td>
+      </tr>
+      <tr>
+        <td><em style="color:var(--muted)">(無)</em></td>
+        <td>/workspace/project</td>
+        <td>—</td>
+        <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">不掛載，看不到 host 程式碼</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin-top:2rem">Credential Proxy — container 不知道真實 API key</h3>
+
+  <div class="proxy-flow">
+    <div class="proxy-node" style="border-color:#d2a8ff66;color:var(--accent3)">
+      Container<br>
+      <span style="font-size:0.68rem;color:var(--muted)">ANTHROPIC_API_KEY<br>=placeholder</span>
+    </div>
+    <div class="proxy-arrow">
+      <div class="proxy-arrow-label">→ http://host:PORT</div>
+      <div class="proxy-arrow-line"></div>
+      <div class="proxy-arrow-label">placeholder key</div>
+    </div>
+    <div class="proxy-node" style="border-color:#58a6ff66;color:var(--accent)">
+      Credential<br>Proxy<br>
+      <span style="font-size:0.68rem;color:var(--muted)">src/credential-proxy.ts</span>
+    </div>
+    <div class="proxy-arrow">
+      <div class="proxy-arrow-label">→ https://api.anthropic.com</div>
+      <div class="proxy-arrow-line"></div>
+      <div class="proxy-arrow-label" style="color:var(--accent2)">真實 x-api-key 注入</div>
+    </div>
+    <div class="proxy-node" style="border-color:#ff7b7266;color:var(--accent5)">
+      Anthropic<br>API<br>
+      <span style="font-size:0.68rem;color:var(--muted)">api.anthropic.com</span>
+    </div>
+    <div class="proxy-arrow">
+      <div class="proxy-arrow-label">↙ 回傳 + 快取</div>
+      <div class="proxy-arrow-line"></div>
+      <div class="proxy-arrow-label">rate-limit headers</div>
+    </div>
+    <div class="proxy-node" style="border-color:#ffa65766;color:var(--accent4)">
+      /usage<br>endpoint<br>
+      <span style="font-size:0.68rem;color:var(--muted)">container 可查詢</span>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>API Key 模式</h3>
+      <p style="font-size:0.82rem">Container 帶 <code style="background:var(--code-bg);padding:0.1rem 0.3rem;border-radius:3px;font-family:monospace">x-api-key: placeholder</code> 請求。Proxy 每次都替換為真實 key。</p>
+    </div>
+    <div class="card">
+      <h3>OAuth 模式</h3>
+      <p style="font-size:0.82rem">Container CLI 用 placeholder Bearer token 向 Anthropic 換取臨時 API key。Proxy 在這個 exchange 請求上注入真實 OAuth token；後續請求用臨時 key，直接通過。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 5: MEMORY -->
+<section id="memory">
+  <hr class="section-divider">
+  <div class="section-label" style="margin-top:4rem">§5 記憶與規則</div>
+  <h2>Agent 如何運用記憶和規則</h2>
+  <p>記憶分為四層，各層的讀寫範圍和存活時間不同。點擊各層查看詳細說明。</p>
+
+  <div class="memory-stack">
+
+    <div class="memory-layer layer-global open" onclick="toggleLayer(this)">
+      <div class="memory-layer-header">
+        <div class="memory-layer-title">① Global CLAUDE.md — 全局規則</div>
+        <div class="memory-layer-meta">
+          <span class="badge badge-ro">read-only</span>
+          <span class="badge badge-all">所有 non-main group</span>
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="memory-layer-body">
+        <p>存放於 <strong>groups/global/CLAUDE.md</strong>，掛載為 <code>/workspace/global</code>（read-only）。</p>
+        <p>Agent runner 在啟動 SDK query 前讀取此檔，將內容 <strong>append 到 system prompt</strong>：</p>
+        <code><span class="cm">// agent-runner/src/index.ts</span>
+<span class="kw">const</span> globalClaudeMd = fs.<span class="fn">readFileSync</span>(<span class="str">'/workspace/global/CLAUDE.md'</span>, <span class="str">'utf-8'</span>);
+<span class="cm">// 傳入 SDK</span>
+systemPrompt: { type: <span class="str">'preset'</span>, preset: <span class="str">'claude_code'</span>, append: globalClaudeMd }</code>
+        <p>適合寫入跨 group 通用的行為規則、語氣設定、禁止行為等。Main group 不使用（它有更大的 project 視野）。</p>
+      </div>
+    </div>
+
+    <div class="memory-layer layer-group" onclick="toggleLayer(this)">
+      <div class="memory-layer-header">
+        <div class="memory-layer-title">② Group CLAUDE.md — 群組專屬規則</div>
+        <div class="memory-layer-meta">
+          <span class="badge badge-rw">read-write</span>
+          <span class="badge badge-all">永久持久化</span>
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="memory-layer-body">
+        <p>存放於 <strong>groups/{folder}/CLAUDE.md</strong>，以 <code>/workspace/group</code>（read-write）掛載。</p>
+        <p>Claude Code SDK 啟動時自動讀取 <code>cwd</code>（即 /workspace/group）下的 CLAUDE.md。Agent 可以直接修改這個檔案來「記住」事情：</p>
+        <code>cwd: <span class="str">'/workspace/group'</span>,
+<span class="cm">// SDK 自動讀取 /workspace/group/CLAUDE.md</span></code>
+        <p>這是 Agent「學習」的主要機制——對話中發現的偏好、重要設定，直接寫進這個檔案，下次啟動的 container 仍會記得。</p>
+        <p>額外掛載目錄（<code>/workspace/extra/*</code>）的 CLAUDE.md 也會透過 <code>additionalDirectories</code> 被讀取：</p>
+        <code>additionalDirectories: [<span class="str">'/workspace/extra/notes'</span>, <span class="str">'/workspace/extra/docs'</span>]
+<span class="cm">// CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1</span></code>
+      </div>
+    </div>
+
+    <div class="memory-layer layer-session" onclick="toggleLayer(this)">
+      <div class="memory-layer-header">
+        <div class="memory-layer-title">③ Session — 對話連續性</div>
+        <div class="memory-layer-meta">
+          <span class="badge badge-rw">read-write</span>
+          <span class="badge" style="background:rgba(88,166,255,0.15);color:var(--accent);border:1px solid rgba(88,166,255,0.3)">跨 container 啟動</span>
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="memory-layer-body">
+        <p>每個 group 有獨立的 <strong>data/sessions/{folder}/.claude/</strong>，掛載為 <code>/home/node/.claude</code>，存放 Claude Code 的 session transcript。</p>
+        <p>Session ID 的流動：</p>
+        <code><span class="cm">// 1. Host 從 SQLite 讀取上次 session ID</span>
+<span class="kw">const</span> sessionId = sessions[group.folder];
+
+<span class="cm">// 2. 傳入 container stdin</span>
+{ prompt, sessionId, groupFolder, ... }
+
+<span class="cm">// 3. agent-runner 用 resume 接續</span>
+resume: sessionId,  <span class="cm">// SDK option</span>
+
+<span class="cm">// 4. SDK 回傳新 session ID，host 存回 SQLite</span>
+sessions[group.folder] = output.newSessionId;
+<span class="fn">setSession</span>(group.folder, output.newSessionId);</code>
+        <p>這讓 Agent 跨多次 container 啟動仍能「記得」前次對話的上下文。</p>
+      </div>
+    </div>
+
+    <div class="memory-layer layer-conv" onclick="toggleLayer(this)">
+      <div class="memory-layer-header">
+        <div class="memory-layer-title">④ Conversations — 對話封存（PreCompact Hook）</div>
+        <div class="memory-layer-meta">
+          <span class="badge badge-rw">write</span>
+          <span class="badge" style="background:rgba(210,168,255,0.15);color:var(--accent3);border:1px solid rgba(210,168,255,0.3)">context compaction 前觸發</span>
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="memory-layer-body">
+        <p>當 Claude Code SDK 準備進行 context compaction（壓縮對話記憶）時，<strong>PreCompact hook</strong> 會在壓縮前自動觸發，將完整對話存成 Markdown：</p>
+        <code><span class="cm">// agent-runner/src/index.ts</span>
+hooks: {
+  PreCompact: [{ hooks: [<span class="fn">createPreCompactHook</span>(assistantName)] }],
+}
+
+<span class="cm">// 輸出到：</span>
+/workspace/group/conversations/<span class="str">{date}-{話題名稱}.md</span></code>
+        <p>封存流程：</p>
+        <code><span class="num">1.</span> 讀取 transcript JSON → 解析 user/assistant 訊息
+<span class="num">2.</span> 查 sessions-index.json 取得 session summary（作為檔名）
+<span class="num">3.</span> 格式化成 Markdown，截斷超過 2000 字的訊息
+<span class="num">4.</span> 寫入 conversations/{date}-{slug}.md</code>
+        <p>即使 session 被壓縮，<code>conversations/</code> 目錄仍保留完整歷史，Agent 可以讀取它們回顧過往對話。</p>
+      </div>
+    </div>
+
+    <div class="memory-layer" style="cursor:default;border-style:dashed" onclick="toggleLayer(this)">
+      <div class="memory-layer-header">
+        <div class="memory-layer-title">⑤ Container Skills — 指令文件</div>
+        <div class="memory-layer-meta">
+          <span class="badge badge-ro">read-only（每次 sync）</span>
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="memory-layer-body">
+        <p>Host 在啟動 container 前，會將 <strong>container/skills/*</strong> 同步到 <code>data/sessions/{folder}/.claude/skills/</code>，container 內看到 <code>/home/node/.claude/skills/</code>。</p>
+        <p>每個 skill 是一個帶有 <code>SKILL.md</code> 的目錄，SDK 在收到對應 <code>/指令</code> 時讀取並執行其中的步驟：</p>
+        <code>container/skills/
+  agent-browser/SKILL.md  <span class="cm">← /agent-browser</span>
+  capabilities/SKILL.md   <span class="cm">← /capabilities</span>
+  status/SKILL.md         <span class="cm">← /status</span>
+  slack-formatting/SKILL.md</code>
+        <p>Sync 程式碼（container-runner.ts）：</p>
+        <code><span class="kw">const</span> skillsSrc = path.<span class="fn">join</span>(cwd, <span class="str">'container'</span>, <span class="str">'skills'</span>);
+<span class="kw">const</span> skillsDst = path.<span class="fn">join</span>(groupSessionsDir, <span class="str">'skills'</span>);
+<span class="cm">// 每次 container 啟動前都 sync，確保最新版本</span>
+fs.<span class="fn">cpSync</span>(srcDir, dstDir, { recursive: <span class="kw">true</span> });</code>
+      </div>
+    </div>
+
+  </div>
+
+  <h3 style="margin-top:2rem">記憶層總覽</h3>
+  <div class="perm-matrix">
+    <table>
+      <thead>
+        <tr>
+          <th>記憶層</th>
+          <th>路徑</th>
+          <th>可寫？</th>
+          <th>Main</th>
+          <th>Non-main</th>
+          <th>存活範圍</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--accent4)">Global CLAUDE.md</td>
+          <td>groups/global/CLAUDE.md</td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">—</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">永久</td>
+        </tr>
+        <tr>
+          <td style="color:var(--accent2)">Group CLAUDE.md</td>
+          <td>groups/{folder}/CLAUDE.md</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">永久</td>
+        </tr>
+        <tr>
+          <td style="color:var(--accent)">Session transcript</td>
+          <td>data/sessions/{folder}/.claude/</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">直到 compaction</td>
+        </tr>
+        <tr>
+          <td style="color:var(--accent3)">Conversations</td>
+          <td>groups/{folder}/conversations/</td>
+          <td><span class="yes">✓（agent 寫）</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">永久</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted)">Container Skills</td>
+          <td>container/skills/ → .claude/skills/</td>
+          <td><span class="no">✗（host sync）</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">每次啟動重 sync</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 6: IPC -->
+<section id="ipc">
+  <hr class="section-divider">
+  <div class="section-label" style="margin-top:4rem">§6 IPC 系統</div>
+  <h2>Container ↔ Host 通訊</h2>
+  <p>Container 透過<strong>寫入 JSON 檔案</strong>到 <code>/workspace/ipc/</code> 發出指令，Host 的 IPC watcher 每 500ms 掃描並執行，再刪除檔案。</p>
+
+  <div class="two-col" style="margin:1.5rem 0">
+    <div class="card">
+      <h3>Host → Container（stdin + IPC input）</h3>
+      <p style="font-size:0.82rem">初始 prompt 透過 <strong>stdin JSON</strong> 送入。後續訊息透過 <code>/workspace/ipc/input/</code> 目錄的 JSON 檔案，或 <code>_close</code> sentinel 結束 session。</p>
+      <div class="code-block" style="font-size:0.75rem">
+<span class="cm">// 初始</span>
+container.stdin.write(JSON.stringify(input));
+container.stdin.end();
+
+<span class="cm">// 後續訊息（piping）</span>
+ipc/input/{timestamp}.json
+{ type: "message", text: "..." }
+
+<span class="cm">// 結束</span>
+ipc/input/_close
+      </div>
+    </div>
+    <div class="card">
+      <h3>Container → Host（IPC output）</h3>
+      <p style="font-size:0.82rem">Container 將指令寫入 <code>/workspace/ipc/{messages,tasks}/</code>，Host watcher 輪詢處理。身份由目錄路徑決定，不可偽造。</p>
+      <div class="code-block" style="font-size:0.75rem">
+<span class="cm">// 發訊息</span>
+ipc/messages/{ts}.json
+{ type: "message", chatJid, text }
+
+<span class="cm">// 操作 task</span>
+ipc/tasks/{ts}.json
+{ type: "schedule_task", prompt, ... }
+
+<span class="cm">// stdout（即時串流）</span>
+---NANOCLAW_OUTPUT_START---
+{"status":"success","result":"回覆文字"}
+---NANOCLAW_OUTPUT_END---
+      </div>
+    </div>
+  </div>
+
+  <h3>支援的 IPC 類型</h3>
+  <div class="ipc-grid">
+    <div class="ipc-card">
+      <div class="ipc-card-title">message</div>
+      <div class="ipc-card-desc">發訊息到指定 chatJid。Non-main group 只能發給自己的 group。</div>
+      <div class="perm-row">
+        <span class="badge badge-all">main</span>
+        <span class="badge" style="background:rgba(63,185,80,0.1);color:var(--accent2);border:1px solid rgba(63,185,80,0.2);font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:4px;font-family:monospace">self only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">schedule_task</div>
+      <div class="ipc-card-desc">建立定時任務（cron / interval / once）。</div>
+      <div class="perm-row">
+        <span class="badge badge-all">main</span>
+        <span class="badge" style="background:rgba(63,185,80,0.1);color:var(--accent2);border:1px solid rgba(63,185,80,0.2);font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:4px;font-family:monospace">self only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">pause_task / resume_task</div>
+      <div class="ipc-card-desc">暫停或恢復一個已存在的 task。</div>
+      <div class="perm-row">
+        <span class="badge badge-all">main</span>
+        <span class="badge" style="background:rgba(63,185,80,0.1);color:var(--accent2);border:1px solid rgba(63,185,80,0.2);font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:4px;font-family:monospace">self only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">cancel_task</div>
+      <div class="ipc-card-desc">永久刪除一個 task。</div>
+      <div class="perm-row">
+        <span class="badge badge-all">main</span>
+        <span class="badge" style="background:rgba(63,185,80,0.1);color:var(--accent2);border:1px solid rgba(63,185,80,0.2);font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:4px;font-family:monospace">self only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">update_task</div>
+      <div class="ipc-card-desc">修改 task 的 prompt 或排程設定，自動重算 next_run。</div>
+      <div class="perm-row">
+        <span class="badge badge-all">main</span>
+        <span class="badge" style="background:rgba(63,185,80,0.1);color:var(--accent2);border:1px solid rgba(63,185,80,0.2);font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:4px;font-family:monospace">self only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">refresh_groups</div>
+      <div class="ipc-card-desc">觸發 channel sync，重整 available_groups.json 快照。</div>
+      <div class="perm-row">
+        <span class="badge badge-main">main only</span>
+      </div>
+    </div>
+    <div class="ipc-card">
+      <div class="ipc-card-title">register_group</div>
+      <div class="ipc-card-desc">將一個 chat JID 註冊為 NanoClaw group。Agent 無法透過 IPC 將 group 設為 isMain（防禦性設計）。</div>
+      <div class="perm-row">
+        <span class="badge badge-main">main only</span>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:1.5rem">IPC 權限矩陣</h3>
+  <div class="perm-matrix">
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>Main Group</th>
+          <th>Non-main Group</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>發訊息給任意 group</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">Non-main 只能發給自己的 chatJid</td>
+        </tr>
+        <tr>
+          <td>為其他 group 建立 task</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">targetFolder !== sourceGroup 直接 block</td>
+        </tr>
+        <tr>
+          <td>操作自己的 task</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">task.group_folder === sourceGroup</td>
+        </tr>
+        <tr>
+          <td>register_group</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">且無法設定 isMain=true</td>
+        </tr>
+        <tr>
+          <td>refresh_groups</td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">只有 main group 才需要 group 清單</td>
+        </tr>
+        <tr>
+          <td>看到 available_groups</td>
+          <td><span class="yes">✓（全部）</span></td>
+          <td><span class="no">✗（空陣列）</span></td>
+          <td style="color:var(--muted);font-family:sans-serif;font-size:0.8rem">writeGroupsSnapshot 的可見性控制</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:3rem;padding:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+    <p style="font-size:0.82rem;margin:0">
+      <strong>安全設計核心：</strong>IPC 目錄路徑決定身份（<code>data/ipc/{groupFolder}/</code>），每個 group 只能寫入自己的 namespace。Host 不相信 JSON 裡宣稱的身份，只看<strong>檔案來自哪個目錄</strong>。這樣即使 container 被攻破，也無法偽裝成 main group 執行特權操作。
+    </p>
+  </div>
+</section>
+
+<div style="height:6rem"></div>
+
+<script>
+// ─── SCROLL PROGRESS ───────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  const pct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+  document.getElementById('progBar').style.width = pct + '%';
+
+  const sections = document.querySelectorAll('section');
+  const links = document.querySelectorAll('.nav-link');
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 120) current = s.id;
+  });
+  links.forEach(l => {
+    l.classList.toggle('active', l.getAttribute('href') === '#' + current);
+  });
+});
+
+// ─── STEP TOGGLE ──────────────────────────────────────────────────────────
+function activateStep(el) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ─── ARCH TIPS ────────────────────────────────────────────────────────────
+const tips = {
+  channel: '每個 channel 是獨立 skill，在 import 時呼叫 registerChannel() 自我註冊。Credential 缺失時 factory 回傳 null，自動跳過。',
+  poll: 'startMessageLoop()：每 POLL_INTERVAL (預設 2s) 輪詢 SQLite getNewMessages()，依 group 分組後判斷是否有 trigger，再決定啟動 container 或 pipe 訊息。',
+  queue: 'GroupQueue 保證同一 group 同時只有一個 container 在執行。可透過 sendMessage() 將新訊息 pipe 進正在執行的 container stdin。',
+  runner: 'runContainerAgent()：spawn docker/container run，stdin 送 ContainerInput JSON，stdout 用 sentinel marker 解析串流輸出，timeout 後 graceful stop。',
+  container: '每個 container 只能看到被明確 mount 的目錄。Main group 多了 /workspace/project (read-only)，可讀取 host 原始碼但無法修改。',
+};
+
+function showTip(key) {
+  const box = document.getElementById('tip-box');
+  const text = document.getElementById('tip-text');
+  text.textContent = tips[key] || key;
+  box.style.display = 'block';
+  box.className = 'code-block slide-in';
+  void box.offsetWidth;
+  box.className = 'code-block slide-in';
+}
+
+// ─── MEMORY LAYERS ─────────────────────────────────────────────────────────
+function toggleLayer(el) {
+  el.classList.toggle('open');
+}
+
+// ─── MOUNT TABS ────────────────────────────────────────────────────────────
+function showMountTab(tab) {
+  document.getElementById('mountTableMain').style.display = tab === 'main' ? '' : 'none';
+  document.getElementById('mountTableOther').style.display = tab === 'other' ? '' : 'none';
+  document.getElementById('mountTabMain').classList.toggle('active', tab === 'main');
+  document.getElementById('mountTabOther').classList.toggle('active', tab === 'other');
+}
+
+// ─── MESSAGE FLOW ──────────────────────────────────────────────────────────
+let flowMode = 'main';
+let flowStep = 0;
+
+const flows = {
+  main: {
+    nodes: [
+      { id: 'user', label: '用戶', sub: 'WhatsApp\nTelegram...', color: 'green' },
+      { id: 'db', label: 'SQLite', sub: 'storeMessage()', color: 'orange' },
+      { id: 'poll', label: 'MessageLoop', sub: 'poll每2s', color: 'blue' },
+      { id: 'queue', label: 'GroupQueue', sub: 'enqueue', color: 'blue' },
+      { id: 'runner', label: 'container-\nrunner', sub: 'spawn', color: 'purple' },
+      { id: 'container', label: 'Container\n(Claude)', sub: 'agent-runner', color: 'purple' },
+      { id: 'reply', label: '用戶', sub: '收到回覆', color: 'green' },
+    ],
+    steps: [
+      { active: [0], arrows: [], desc: '<strong>用戶發送訊息</strong>到 WhatsApp/Telegram/Slack 等 channel。' },
+      { active: [0,1], arrows: [0], desc: '<strong>onMessage() 回調</strong>：先檢查 sender allowlist，通過後呼叫 storeMessage() 存入 SQLite。' },
+      { active: [1,2], arrows: [1], desc: '<strong>startMessageLoop()</strong> 每 2 秒輪詢 getNewMessages()，Main group 不需要 trigger，直接進入處理。' },
+      { active: [2,3], arrows: [2], desc: '<strong>GroupQueue.enqueueMessageCheck()</strong>：沒有 active container 時將此 group 入 queue，等待 processGroupMessages()。' },
+      { active: [3,4], arrows: [3], desc: '<strong>processGroupMessages()</strong>：撈出 lastAgentTimestamp 之後的訊息，formatMessages() 成 XML，呼叫 runContainerAgent()。' },
+      { active: [4,5], arrows: [4], desc: '<strong>spawn container</strong>：透過 stdin 送入 ContainerInput JSON（含 prompt、sessionId、imageAttachments）。Credential proxy 注入 API key。' },
+      { active: [5,6], arrows: [5], desc: '<strong>Container 執行完畢</strong>，stdout 輸出 OUTPUT_START/END 包裹的結果，host 解析後呼叫 channel.sendMessage() 回傳給用戶。' },
+    ]
+  },
+  nonmain: {
+    nodes: [
+      { id: 'user', label: '用戶', sub: '一般訊息', color: 'green' },
+      { id: 'db', label: 'SQLite', sub: 'storeMessage()', color: 'orange' },
+      { id: 'poll', label: 'MessageLoop', sub: 'poll每2s', color: 'blue' },
+      { id: 'trigger', label: 'Trigger\n判斷', sub: 'TRIGGER_PATTERN', color: 'red' },
+      { id: 'queue', label: 'GroupQueue', sub: 'enqueue', color: 'blue' },
+      { id: 'container', label: 'Container\n(Claude)', sub: '含前置 context', color: 'purple' },
+      { id: 'reply', label: '用戶', sub: '收到回覆', color: 'green' },
+    ],
+    steps: [
+      { active: [0], arrows: [], desc: '<strong>用戶發送一般訊息</strong>（不含 trigger）到 non-main group。' },
+      { active: [0,1], arrows: [0], desc: '<strong>storeMessage()</strong>：訊息存入 SQLite，作為未來的 context 累積。此時不觸發 agent。' },
+      { active: [1,2], arrows: [1], desc: '<strong>MessageLoop 輪詢</strong>到這條訊息，但 non-main group 需要 trigger 才能繼續。' },
+      { active: [2,3], arrows: [2], desc: '<strong>Trigger 檢查</strong>：這批訊息中沒有 TRIGGER_PATTERN（@claw 等），<strong>直接跳過</strong>，等待下一次有 trigger 的訊息到來。', skip: [4,5] },
+      { active: [3], arrows: [3], desc: '<strong>用戶發送含 trigger 的訊息</strong>，例如 "@claw 幫我整理一下"。現在才真正觸發處理。' },
+      { active: [3,4], arrows: [3], desc: '<strong>Trigger 通過</strong>：從 lastAgentTimestamp 開始，撈出所有累積的訊息（包含先前的 context），一起送給 agent。' },
+      { active: [4,5,6], arrows: [4,5], desc: '<strong>Container 執行</strong>，agent 看到完整的對話 context，給出回覆，送回用戶。' },
+    ]
+  },
+  pipe: {
+    nodes: [
+      { id: 'user', label: '用戶', sub: '新訊息', color: 'green' },
+      { id: 'db', label: 'SQLite', sub: 'storeMessage()', color: 'orange' },
+      { id: 'poll', label: 'MessageLoop', sub: 'poll每2s', color: 'blue' },
+      { id: 'queue', label: 'GroupQueue', sub: 'sendMessage()', color: 'blue' },
+      { id: 'ipc', label: 'IPC input', sub: '/workspace/ipc\n/input/', color: 'orange' },
+      { id: 'container', label: 'Container\n(Claude)', sub: '持續存活', color: 'purple' },
+      { id: 'reply', label: '用戶', sub: '快速回覆', color: 'green' },
+    ],
+    steps: [
+      { active: [0], arrows: [], desc: '<strong>Container 仍在執行中</strong>（上一個 query 還沒結束，或 idle 等待中）。' },
+      { active: [0,1], arrows: [0], desc: '<strong>用戶發送新訊息</strong>，存入 SQLite。' },
+      { active: [1,2], arrows: [1], desc: '<strong>MessageLoop 輪詢</strong>到新訊息，發現 GroupQueue 有 active container。' },
+      { active: [2,3], arrows: [2], desc: '<strong>queue.sendMessage()</strong>：不啟動新 container，直接 pipe 訊息。cursor 前進，顯示 typing indicator。' },
+      { active: [3,4], arrows: [3], desc: '<strong>寫入 IPC input 目錄</strong>：Host 將格式化的訊息寫成 JSON 檔案到 /workspace/ipc/input/。' },
+      { active: [4,5], arrows: [4], desc: '<strong>Container 內的 IPC poller</strong>（每 500ms）偵測到新檔案，透過 MessageStream.push() 注入正在執行的 query。' },
+      { active: [5,6], arrows: [5], desc: '<strong>Agent 處理後回覆</strong>。整個過程省去了啟動新 container 的開銷，延遲大幅降低。' },
+    ]
+  }
+};
+
+function renderFlow() {
+  const f = flows[flowMode];
+  const stage = document.getElementById('flowStage');
+  stage.innerHTML = '';
+
+  f.nodes.forEach((node, i) => {
+    const nd = document.createElement('div');
+    nd.className = 'flow-node';
+    nd.id = 'fn-' + i;
+
+    const box = document.createElement('div');
+    box.className = 'flow-box';
+    box.id = 'fb-' + i;
+    box.innerHTML = node.label.replace('\n', '<br>') + '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.2rem">' + node.sub.replace('\n','<br>') + '</div>';
+    nd.appendChild(box);
+    stage.appendChild(nd);
+
+    if (i < f.nodes.length - 1) {
+      const conn = document.createElement('div');
+      conn.className = 'flow-connector';
+      const arrow = document.createElement('div');
+      arrow.className = 'flow-arrow';
+      arrow.id = 'fa-' + i;
+      arrow.textContent = '→';
+      conn.appendChild(arrow);
+      stage.appendChild(conn);
+    }
+  });
+
+  document.getElementById('flowTotal').textContent = f.steps.length;
+  applyFlowStep();
+}
+
+function applyFlowStep() {
+  const f = flows[flowMode];
+  const nodes = f.nodes;
+
+  // Reset all
+  nodes.forEach((_, i) => {
+    const box = document.getElementById('fb-' + i);
+    if (box) box.className = 'flow-box';
+    const arrow = document.getElementById('fa-' + i);
+    if (arrow) arrow.className = 'flow-arrow';
+  });
+
+  if (flowStep === 0) {
+    document.getElementById('flowDesc').innerHTML = '按下「下一步」開始播放流程。';
+    document.getElementById('flowStepInfo').innerHTML = '步驟 0 / ' + f.steps.length;
+    return;
+  }
+
+  const step = f.steps[flowStep - 1];
+  const colorMap = { blue: 'lit', green: 'lit-green', purple: 'lit-purple', orange: 'lit-orange', red: 'lit-red' };
+
+  // Apply skipped
+  if (step.skip) {
+    step.skip.forEach(i => {
+      const box = document.getElementById('fb-' + i);
+      if (box) box.classList.add('skipped');
+    });
+  }
+
+  // Light up active nodes
+  step.active.forEach(i => {
+    const box = document.getElementById('fb-' + i);
+    if (box) {
+      box.classList.remove('skipped');
+      const color = nodes[i].color;
+      box.className = 'flow-box ' + (colorMap[color] || 'lit');
+    }
+  });
+
+  // Light up arrows
+  step.arrows.forEach(i => {
+    const arrow = document.getElementById('fa-' + i);
+    if (arrow) arrow.className = 'flow-arrow active-arrow';
+  });
+
+  document.getElementById('flowDesc').innerHTML = step.desc;
+  document.getElementById('flowStepInfo').innerHTML = '步驟 ' + flowStep + ' / ' + f.steps.length;
+}
+
+function flowNext() {
+  const f = flows[flowMode];
+  if (flowStep < f.steps.length) {
+    flowStep++;
+    applyFlowStep();
+  }
+}
+
+function flowReset() {
+  flowStep = 0;
+  applyFlowStep();
+  renderFlow();
+}
+
+function setFlowMode(mode, btn) {
+  flowMode = mode;
+  flowStep = 0;
+  document.querySelectorAll('.flow-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderFlow();
+}
+
+// Init
+renderFlow();
+</script>
+</body>
+</html>
