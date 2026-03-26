@@ -1,4 +1,10 @@
+import dns from 'dns';
 import https from 'https';
+
+// Node.js v22+ enables Happy Eyeballs v2 by default, which tries IPv4 and IPv6
+// simultaneously and throws AggregateError when both fail. On networks with broken
+// IPv6, this causes uncaught exceptions that crash NanoClaw. Force IPv4-first.
+dns.setDefaultResultOrder('ipv4first');
 import path from 'path';
 import { Api, Bot } from 'grammy';
 
@@ -56,9 +62,9 @@ export class TelegramChannel implements Channel {
   }
 
   async connect(): Promise<void> {
-    // Force IPv4 — Node.js v17+ may prefer IPv6 for DNS, but some networks
-    // have broken IPv6 connectivity, causing ETIMEDOUT on Telegram API calls.
-    const ipv4Agent = new https.Agent({ family: 4 });
+    // Disable Happy Eyeballs v2 (Node.js v22+) which tries IPv4+IPv6 in parallel
+    // and throws AggregateError when both fail — not caught by grammY, crashing the process.
+    const ipv4Agent = new https.Agent({ family: 4, autoSelectFamily: false });
     this.bot = new Bot(this.botToken, {
       client: {
         baseFetchConfig: { agent: ipv4Agent, compress: true },
