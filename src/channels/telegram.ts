@@ -1,10 +1,14 @@
 import dns from 'dns';
 import https from 'https';
+import net from 'net';
 
 // Node.js v22+ enables Happy Eyeballs v2 by default, which tries IPv4 and IPv6
 // simultaneously and throws AggregateError when both fail. On networks with broken
-// IPv6, this causes uncaught exceptions that crash NanoClaw. Force IPv4-first.
+// IPv6, this causes polling errors in grammY. Disable it globally and force IPv4.
 dns.setDefaultResultOrder('ipv4first');
+if (typeof (net as typeof net & { setDefaultAutoSelectFamily?: (v: boolean) => void }).setDefaultAutoSelectFamily === 'function') {
+  (net as typeof net & { setDefaultAutoSelectFamily: (v: boolean) => void }).setDefaultAutoSelectFamily(false);
+}
 import path from 'path';
 import { Api, Bot } from 'grammy';
 
