@@ -9,7 +9,8 @@ import os from 'os';
 import { logger } from './logger.js';
 
 /** The container runtime binary name. */
-export const CONTAINER_RUNTIME_BIN = 'container';
+export const CONTAINER_RUNTIME_BIN =
+  process.env.CONTAINER_RUNTIME || 'docker';
 
 /**
  * For Apple Container (macOS), detect the host's IP on the container bridge network.
@@ -93,9 +94,41 @@ export function stopContainer(name: string): string {
 /** Ensure the container runtime is running, starting it if needed. */
 export function ensureContainerRuntimeRunning(): void {
   try {
-    execSync(`${CONTAINER_RUNTIME_BIN} system status`, { stdio: 'pipe' });
+    if (CONTAINER_RUNTIME_BIN === 'docker') {
+      execSync('docker info', { stdio: 'pipe' });
+    } else {
+      execSync(`${CONTAINER_RUNTIME_BIN} system status`, { stdio: 'pipe' });
+    }
     logger.debug('Container runtime already running');
   } catch {
+    if (CONTAINER_RUNTIME_BIN === 'docker') {
+      logger.error('Docker daemon is not running');
+      console.error(
+        '\n╔════════════════════════════════════════════════════════════════╗',
+      );
+      console.error(
+        '║  FATAL: Docker is not running                                  ║',
+      );
+      console.error(
+        '║                                                                ║',
+      );
+      console.error(
+        '║  Agents cannot run without Docker. To fix:                     ║',
+      );
+      console.error(
+        '║  1. Open Docker Desktop                                        ║',
+      );
+      console.error(
+        '║  2. Wait for it to finish starting                             ║',
+      );
+      console.error(
+        '║  3. Restart NanoClaw                                           ║',
+      );
+      console.error(
+        '╚════════════════════════════════════════════════════════════════╝\n',
+      );
+      throw new Error('Docker is required but not running');
+    }
     logger.info('Starting container runtime...');
     try {
       execSync(`${CONTAINER_RUNTIME_BIN} system start`, {
@@ -137,18 +170,33 @@ export function ensureContainerRuntimeRunning(): void {
 /** Kill orphaned NanoClaw containers from previous runs. */
 export function cleanupOrphans(): void {
   try {
-    const output = execSync(`${CONTAINER_RUNTIME_BIN} ls --format json`, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8',
-    });
-    const containers: { status: string; configuration: { id: string } }[] =
-      JSON.parse(output || '[]');
-    const orphans = containers
-      .filter(
-        (c) =>
-          c.status === 'running' && c.configuration.id.startsWith('nanoclaw-'),
-      )
-      .map((c) => c.configuration.id);
+    let orphans: string[] = [];
+
+    if (CONTAINER_RUNTIME_BIN === 'docker') {
+      const output = execSync(
+        `docker ps --filter name=nanoclaw- --format '{{.Names}}'`,
+        { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+      );
+      orphans = output
+        .trim()
+        .split('\n')
+        .filter((n) => n.startsWith('nanoclaw-'));
+    } else {
+      const output = execSync(`${CONTAINER_RUNTIME_BIN} ls --format json`, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf-8',
+      });
+      const containers: { status: string; configuration: { id: string } }[] =
+        JSON.parse(output || '[]');
+      orphans = containers
+        .filter(
+          (c) =>
+            c.status === 'running' &&
+            c.configuration.id.startsWith('nanoclaw-'),
+        )
+        .map((c) => c.configuration.id);
+    }
+
     for (const name of orphans) {
       try {
         execSync(stopContainer(name), { stdio: 'pipe' });

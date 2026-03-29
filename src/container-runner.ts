@@ -77,6 +77,20 @@ function buildVolumeMounts(
       readonly: true,
     });
 
+    // Docker supports file-over-file bind mounts — shadow .env so the agent
+    // cannot read host secrets. Apple Container uses mount --bind in the
+    // entrypoint instead (it only supports directory mounts).
+    if (CONTAINER_RUNTIME_BIN === 'docker') {
+      const dotEnvPath = path.join(projectRoot, '.env');
+      if (fs.existsSync(dotEnvPath)) {
+        mounts.push({
+          hostPath: '/dev/null',
+          containerPath: '/workspace/project/.env',
+          readonly: false,
+        });
+      }
+    }
+
     // Main also gets its group folder as the working directory
     mounts.push({
       hostPath: groupDir,

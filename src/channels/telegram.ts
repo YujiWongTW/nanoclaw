@@ -6,8 +6,14 @@ import net from 'net';
 // simultaneously and throws AggregateError when both fail. On networks with broken
 // IPv6, this causes polling errors in grammY. Disable it globally and force IPv4.
 dns.setDefaultResultOrder('ipv4first');
-if (typeof (net as typeof net & { setDefaultAutoSelectFamily?: (v: boolean) => void }).setDefaultAutoSelectFamily === 'function') {
-  (net as typeof net & { setDefaultAutoSelectFamily: (v: boolean) => void }).setDefaultAutoSelectFamily(false);
+if (
+  typeof (
+    net as typeof net & { setDefaultAutoSelectFamily?: (v: boolean) => void }
+  ).setDefaultAutoSelectFamily === 'function'
+) {
+  (
+    net as typeof net & { setDefaultAutoSelectFamily: (v: boolean) => void }
+  ).setDefaultAutoSelectFamily(false);
 }
 import path from 'path';
 import { Api, Bot } from 'grammy';
